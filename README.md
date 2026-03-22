@@ -1,1 +1,468 @@
 # Pingdom
+
+**Version 1.2.0**
+
+A lightweight, zero-dependency network quality monitor written in Python 3.10+.  
+It pings your **local gateway**, the **next-hop router**, and an **arbitrary host** (default `8.8.8.8`) on a configurable interval, writing per-host RTT statistics and packet accounting to individual rotating log files.  An auto-updating web dashboard reads the exported JSON data to display 12 hours of network quality history.
+
+---
+
+## Change Log
+
+### 1.2.0 — 2025-06-01
+- **Project renamed** from `ping_monitor` / `pingdom` to **`pingdom`** throughout.
+- **All file names updated**: `pingdom.py`, `pingdom.json`, `pingdom_events.log`, `pingdom_alerts.log`, `pingdom_records.json`, `pingdom_packet_totals.json`.
+- **All environment variables renamed**: `PINGDOM_CONFIG_PATH`, `PINGDOM_LOG_PATH`, `PINGDOM_WEB_PATH`.
+- **New**: `web` config section — controls web data export (`enabled`, `export_hours`, `export_max_points`).
+- **New**: `PINGDOM_WEB_PATH` environment variable / `_SCRIPT_WEB_PATH` script variable for the web output directory.
+- **New**: `web/pingdom_data.json` exported after every ping cycle — the JSON feed consumed by the dashboard.
+- **New**: `pingdom_dashboard.html` — single-file, dependency-light web dashboard displaying RTT and packet-loss charts for the last 12 hours (or configurable window), with live staleness indicator, auto-refresh, and full packet accounting table.
+
+### 1.1.0 — 2025-06-01
+- Dedicated `packets_<role>_<host>.log` per host with per-cycle and cumulative totals.
+- `pingdom_packet_totals.json` — persistent cumulative packet counts, survives restarts.
+- `--stats` CLI flag for terminal summary.
+- Explicit `lost` field computed and propagated everywhere.
+- Handler guard prevents duplicate log entries on repeated calls.
+
+### 1.0.0 — 2025-06-01
+- Initial release.
+- Auto-detection of gateway and next-hop.
+- Per-host rotating RTT logs.
+- Centralised event log and alert log.
+- JSON record storage.
+- Email alerting (authenticated and unauthenticated SMTP).
+- First-run bootstrap with helpful exit message.
+- `--once` and continuous loop modes.
+- CLI host overrides.
+
+---
+
+## Requirements
+
+| Requirement | Notes |
+|---|---|
+| Python | 3.10 or later |
+| `ping` binary | Pre-installed on Linux, macOS, and Windows |
+| `ip route` or `netstat` | For gateway auto-detection (Linux / macOS) |
+| `traceroute` | For next-hop auto-detection (optional; falls back to `1.1.1.1`) |
+| Web server (optional) | nginx or Apache to serve the dashboard — see below |
+| No third-party Python packages | Uses stdlib only |
+
+---
+
+## Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/yourname/pingdom.git
+cd pingdom
+
+# Run once — auto-detects all three hosts
+python pingdom.py --once
+
+# Run continuously (default 60-second interval)
+python pingdom.py
+
+# Override hosts explicitly
+python pingdom.py --gateway 192.168.1.1 --next-hop 10.0.0.1 --arbitrary 1.1.1.1
+
+# Print a cumulative packet summary and exit
+python pingdom.py --stats
+```
+
+On the **first run**, if the configuration file does not exist the script will:
+1. Create the `config/`, `logs/`, and `web/` directory structure.
+2. Write a default `pingdom.json` with all options documented.
+3. Print the path to the new config file.
+4. **Exit** — edit the config, then re-run.
+
+---
+
+## Configuration and Log Paths
+
+Paths are resolved in this priority order:
+
+| Priority | Source | Variable / Env Var |
+|---|---|---|
+| 1 | Environment variable | `PINGDOM_CONFIG_PATH` / `PINGDOM_LOG_PATH` / `PINGDOM_WEB_PATH` |
+| 2 | Script-level variable | `_SCRIPT_CONFIG_PATH` / `_SCRIPT_LOG_PATH` / `_SCRIPT_WEB_PATH` |
+| 3 | Current working directory | `./config/` / `./logs/` / `./web/` |
+
+### Setting via environment
+
+```bash
+export PINGDOM_CONFIG_PATH=/etc/pingdom
+export PINGDOM_LOG_PATH=/var/log/pingdom
+export PINGDOM_WEB_PATH=/var/www/html/pingdom
+python pingdom.py
+```
+
+### Files created automatically
+
+| File | Purpose |
+|---|---|
+| `{CONFIG_DIR}/pingdom.json` | Main configuration file |
+| `{LOG_DIR}/pingdom_events.log` | All events, info, warnings, errors |
+| `{LOG_DIR}/pingdom_alerts.log` | Threshold-breach alerts only |
+| `{LOG_DIR}/rtt_{role}_{host}.log` | Per-host RTT statistics (min/avg/max/stddev) |
+| `{LOG_DIR}/packets_{role}_{host}.log` | Per-host packet accounting (sent/recv/lost, cycle + cumulative) |
+| `{LOG_DIR}/pingdom_records.json` | Persistent per-cycle record store |
+| `{LOG_DIR}/pingdom_packet_totals.json` | Persistent cumulative packet totals per role |
+| `{WEB_DIR}/pingdom_data.json` | Web-readable JSON data feed (updated every cycle) |
+
+Place `pingdom_dashboard.html` in `{WEB_DIR}` alongside `pingdom_data.json` for the dashboard to work.
+
+---
+
+## Configuration File — `pingdom.json`
+
+```jsonc
+{
+    // ── Hosts ────────────────────────────────────────────────
+    "hosts": {
+        "gateway":   "",       // Leave blank for auto-detection via 'ip route'
+        "next_hop":  "",       // Leave blank for auto-detection via 'traceroute'
+        "arbitrary": "8.8.8.8" // Any reachable host or IP
+    },
+
+    // ── Ping behaviour ───────────────────────────────────────
+    "ping": {
+        "count":            5,   // Packets per ping cycle
+        "interval_seconds": 60,  // Seconds between full ping cycles
+        "timeout_seconds":  5,   // Per-packet wait timeout
+        "packet_size":      56   // ICMP payload bytes
+    },
+
+    // ── Alerting ─────────────────────────────────────────────
+    "alerting": {
+        "enabled":            false,
+        "rtt_threshold_ms":   200.0,
+        "loss_threshold_pct": 20.0,
+
+        "email": {
+            "smtp_host":     "localhost",
+            "smtp_port":     25,
+            "smtp_username": "",              // Leave blank for unauthenticated SMTP
+            "smtp_password": "",
+            "from_address":  "pingdom@localhost",
+            "recipients":    ["admin@example.com"]
+        }
+    },
+
+    // ── Logging ──────────────────────────────────────────────
+    "logging": {
+        "max_bytes":    10485760,  // 10 MB per log file before rotation
+        "backup_count": 5,
+        "level":        "INFO"     // DEBUG | INFO | WARNING | ERROR | CRITICAL
+    },
+
+    // ── Storage ──────────────────────────────────────────────
+    "storage": {
+        "records_enabled":      true,
+        "max_records_per_host": 10000
+    },
+
+    // ── Web export ───────────────────────────────────────────
+    "web": {
+        "enabled":           true,   // Write pingdom_data.json after each cycle
+        "export_hours":      12,     // Hours of history to include in the export
+        "export_max_points": 720     // Downsample to at most this many data points per host
+    }
+}
+```
+
+### Key Options
+
+| Option | Default | Effect |
+|---|---|---|
+| `ping.count` | `5` | More packets → more accurate statistics |
+| `ping.interval_seconds` | `60` | Lower = finer granularity, more system load |
+| `alerting.enabled` | `false` | Must be `true` to send alert emails |
+| `alerting.rtt_threshold_ms` | `200.0` | Adjust to match your SLA |
+| `alerting.loss_threshold_pct` | `20.0` | Raise to reduce noise on flaky links |
+| `alerting.email.smtp_username` | `""` | Empty → unauthenticated SMTP relay |
+| `web.enabled` | `true` | Set `false` to skip JSON export |
+| `web.export_hours` | `12` | Dashboard default history window |
+| `web.export_max_points` | `720` | Cap chart resolution for large datasets |
+| `storage.max_records_per_host` | `10000` | Prevents unbounded JSON file growth |
+
+---
+
+## Application Behaviour
+
+### Startup
+
+1. **Path resolution** — Config, log, and web directories are determined via env vars, script variables, or CWD fallback.
+2. **Bootstrap** — Missing directories and files are created automatically. If the config file was just scaffolded, the script prints its path and exits.
+3. **Config merge** — User config is deep-merged over built-in defaults so partially-specified files work correctly.
+4. **Host resolution** — Hosts not specified in config are auto-detected:
+   - **Gateway**: parsed from `ip route show default` (Linux) or `netstat -rn` (macOS/BSD).
+   - **Next-hop**: parsed from `traceroute -n -m 5 8.8.8.8`; falls back to `1.1.1.1`.
+   - **Arbitrary**: defaults to `8.8.8.8` if blank.
+
+### Ping Cycle
+
+For each resolved host:
+1. Runs the system `ping` binary with configured `count`, `timeout`, and `packet_size`.
+2. Parses output for **packets sent, received, and lost** and RTT statistics. Handles Linux, macOS, and Windows ping formats.
+3. Writes a timestamped RTT line to `rtt_<role>_<host>.log`.
+4. Writes a timestamped packet-accounting line to `packets_<role>_<host>.log` — both per-cycle counts and running cumulative totals.
+5. Updates `pingdom_packet_totals.json`.
+6. Writes a consolidated summary line to `pingdom_events.log`.
+7. Checks RTT avg and packet-loss against thresholds; fires alerts if enabled.
+8. Appends a full record to `pingdom_records.json`.
+
+After all hosts are processed, `web/pingdom_data.json` is updated with a filtered, (optionally downsampled) snapshot of the last `export_hours` hours of data.
+
+### Graceful Degradation
+
+- If a host cannot be reached, it is skipped for that cycle and a warning is logged.
+- If the `ping` binary is missing, an error is logged and that host is skipped.
+- If email delivery fails, the error is logged and the monitor continues running.
+- `KeyboardInterrupt` exits cleanly with a log entry.
+
+---
+
+## Dashboard — `pingdom_dashboard.html`
+
+A single self-contained HTML file that reads `pingdom_data.json` from the same directory.  
+No build step, no backend, no npm — just serve both files from a web server.
+
+### Features
+
+| Feature | Detail |
+|---|---|
+| **Staleness indicator** | Header shows how long ago the data was generated. Green → yellow (>90 s) → red (>5 min). |
+| **Auto-refresh** | Fetches `pingdom_data.json` every 30 seconds. Toggle on/off without reload. |
+| **Time window** | Buttons to filter to last 1 h / 3 h / 12 h / All. |
+| **Metric selector** | Switch chart between Avg RTT / Min RTT / Max RTT / Loss %. |
+| **Status cards** | Per-host Online / Degraded / Offline badge with avg RTT, loss %, and last-cycle packet counts. |
+| **Lifetime totals** | Cards showing cumulative sent/received/lost/cycles per host since first run. |
+| **RTT chart** | Multi-line time-series chart for all three hosts. |
+| **Loss chart** | Multi-line packet-loss % chart for all three hosts. |
+| **Packet table** | Most recent 20 cycles per host: timestamp, sent, recv, lost, loss %, avg/min/max/stddev RTT. |
+
+### Serving with nginx
+
+```nginx
+server {
+    listen 80;
+    server_name pingdom.example.com;
+
+    root /var/www/html/pingdom;
+    index pingdom_dashboard.html;
+
+    # Allow JSON to be fetched by the dashboard JS
+    location /pingdom_data.json {
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Pragma        "no-cache";
+        add_header Expires       "0";
+        try_files $uri =404;
+    }
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}
+```
+
+Set `PINGDOM_WEB_PATH=/var/www/html/pingdom` and copy `pingdom_dashboard.html` there.
+
+### Serving with Apache
+
+```apache
+<VirtualHost *:80>
+    ServerName pingdom.example.com
+    DocumentRoot /var/www/html/pingdom
+
+    DirectoryIndex pingdom_dashboard.html
+
+    <Location /pingdom_data.json>
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+        Header set Pragma "no-cache"
+        Header set Expires "0"
+    </Location>
+
+    <Directory /var/www/html/pingdom>
+        Options -Indexes
+        AllowOverride None
+        Require all granted
+    </Directory>
+</VirtualHost>
+```
+
+Enable `mod_headers`: `sudo a2enmod headers && sudo systemctl restart apache2`
+
+---
+
+## Data Structures
+
+### RTT Log Entry (`rtt_<role>_<host>.log`)
+
+```
+2025-06-01T12:00:00+0000  INFO      host=8.8.8.8  min=9.123ms  avg=10.456ms  max=11.789ms  stddev=0.901ms
+```
+
+### Packet Log Entry (`packets_<role>_<host>.log`)
+
+Left of `||` = per-cycle; right of `||` = cumulative session totals:
+
+```
+2025-06-01T12:00:00+0000  INFO  host=8.8.8.8  cycle_sent=5  cycle_recv=5  cycle_lost=0  cycle_loss=0.0%  ||  total_sent=150  total_recv=148  total_lost=2  total_loss=1.3%  total_cycles=30
+```
+
+### Cumulative Packet Totals (`pingdom_packet_totals.json`)
+
+```jsonc
+{
+  "gateway":   { "host": "192.168.1.1", "sent": 150, "received": 150, "lost": 0, "cycles": 30 },
+  "next_hop":  { "host": "1.1.1.1",     "sent": 150, "received": 149, "lost": 1, "cycles": 30 },
+  "arbitrary": { "host": "8.8.8.8",     "sent": 150, "received": 148, "lost": 2, "cycles": 30 }
+}
+```
+
+### Per-Cycle Record (`pingdom_records.json`)
+
+```jsonc
+{
+  "gateway": [
+    {
+      "timestamp":     "2025-06-01T12:00:00+00:00",
+      "host":          "192.168.1.1",
+      "sent":          5,
+      "received":      5,
+      "lost":          0,
+      "loss_pct":      0.0,
+      "rtt_min_ms":    0.812,
+      "rtt_avg_ms":    1.034,
+      "rtt_max_ms":    1.441,
+      "rtt_stddev_ms": 0.213
+    }
+    // ... up to max_records_per_host entries
+  ]
+}
+```
+
+### Web Data Export (`pingdom_data.json`)
+
+Written to `{WEB_DIR}` after every cycle; consumed by the dashboard:
+
+```jsonc
+{
+  "generated_at": "2025-06-01T12:00:00+00:00",
+  "version":      "1.2.0",
+  "window_hours": 12,
+  "totals":       { /* same structure as pingdom_packet_totals.json */ },
+  "hosts": {
+    "gateway":   [ /* filtered & downsampled records */ ],
+    "next_hop":  [ /* ... */ ],
+    "arbitrary": [ /* ... */ ]
+  }
+}
+```
+
+---
+
+## Storage Strategy
+
+- **Format**: JSON throughout — human-readable, easily inspected with `jq`, importable into spreadsheets.
+- **Write strategy**: read → append → trim → write-back per cycle.
+- **Record rotation**: oldest entries evicted once per-host list exceeds `max_records_per_host`.
+- **Log rotation**: all `.log` files rotated by `RotatingFileHandler` at `max_bytes` with `backup_count` copies.
+- **Web export**: a fresh filtered slice is written after every cycle; no appending — the file is always a clean snapshot safe for concurrent HTTP reads.
+
+---
+
+## Running as a Service
+
+### systemd (Linux)
+
+Create `/etc/systemd/system/pingdom.service`:
+
+```ini
+[Unit]
+Description=Pingdom Network Quality Monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nobody
+Group=nogroup
+WorkingDirectory=/opt/pingdom
+Environment="PINGDOM_CONFIG_PATH=/etc/pingdom"
+Environment="PINGDOM_LOG_PATH=/var/log/pingdom"
+Environment="PINGDOM_WEB_PATH=/var/www/html/pingdom"
+ExecStart=/usr/bin/python3 /opt/pingdom/pingdom.py
+Restart=on-failure
+RestartSec=15s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now pingdom
+sudo journalctl -u pingdom -f
+```
+
+### macOS launchd
+
+Create `~/Library/LaunchAgents/com.yourname.pingdom.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>         <string>com.yourname.pingdom</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/you/pingdom/pingdom.py</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PINGDOM_CONFIG_PATH</key> <string>/Users/you/.config/pingdom</string>
+        <key>PINGDOM_LOG_PATH</key>    <string>/Users/you/Library/Logs/pingdom</string>
+        <key>PINGDOM_WEB_PATH</key>    <string>/Users/you/Sites/pingdom</string>
+    </dict>
+    <key>RunAtLoad</key>   <true/>
+    <key>KeepAlive</key>   <true/>
+</dict>
+</plist>
+```
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.yourname.pingdom.plist
+```
+
+### Windows Task Scheduler
+
+```powershell
+$env = @(
+  "PINGDOM_CONFIG_PATH=C:\pingdom\config",
+  "PINGDOM_LOG_PATH=C:\pingdom\logs",
+  "PINGDOM_WEB_PATH=C:\inetpub\wwwroot\pingdom"
+)
+$action  = New-ScheduledTaskAction -Execute "python" -Argument "C:\pingdom\pingdom.py"
+$trigger = New-ScheduledTaskTrigger -AtStartup
+Register-ScheduledTask -TaskName "Pingdom" -Action $action -Trigger $trigger -RunLevel Highest
+```
+
+---
+
+## Dashboard File Layout
+
+```
+/var/www/html/pingdom/         (or wherever PINGDOM_WEB_PATH points)
+├── pingdom_dashboard.html     ← copy manually once
+└── pingdom_data.json          ← written automatically by pingdom.py each cycle
+```
+
+The dashboard fetches `pingdom_data.json` relative to its own URL, so both files must be in the same web-accessible directory.

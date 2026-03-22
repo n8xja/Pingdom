@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pingdom — Network Quality Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  /* ── Google Font ─────────────────────────────────────────── */
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;700;800&display=swap');
+
+  /* ── Design tokens ───────────────────────────────────────── */
+  :root {
+    --bg:          #080c10;
+    --bg2:         #0d1117;
+    --bg3:         #131b24;
+    --border:      #1e2d3d;
+    --border2:     #253345;
+    --text:        #c9d4e0;
+    --text-dim:    #5a7a96;
+    --text-bright: #e8f4ff;
+    --accent:      #00d4ff;
+    --accent2:     #0099cc;
+    --green:       #00e676;
+    --green-dim:   #00613a;
+    --yellow:      #ffd740;
+    --yellow-dim:  #7a6200;
+    --red:         #ff4444;
+    --red-dim:     #7a0000;
+    --purple:      #b388ff;
+    --mono:        'JetBrains Mono', monospace;
+    --sans:        'Syne', sans-serif;
+    --radius:      6px;
+    --glow:        0 0 20px rgba(0,212,255,0.15);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--mono);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Scanline overlay ─────────────────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ── Header ──────────────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-mark {
+    width: 36px;
+    height: 36px;
+    border: 2px solid var(--accent);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 14px rgba(0,212,255,0.4);
+    flex-shrink: 0;
+  }
+
+  .logo-mark svg { width: 20px; height: 20px; }
+
+  .logo-text {
+    font-family: var(--sans);
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--text-bright);
+    letter-spacing: -0.5px;
+  }
+
+  .logo-sub {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-top: 1px;
+  }
+
+  /* ── Staleness indicator ──────────────────────────────────── */
+  .staleness {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-dim);
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 6px 12px;
+    white-space: nowrap;
+  }
+
+  .staleness-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    flex-shrink: 0;
+    transition: background 0.3s, box-shadow 0.3s;
+  }
+
+  .staleness-dot.warn   { background: var(--yellow); box-shadow: 0 0 8px var(--yellow); }
+  .staleness-dot.stale  { background: var(--red);    box-shadow: 0 0 8px var(--red); }
+
+  .staleness-text { color: var(--text); }
+
+  /* ── Controls bar ─────────────────────────────────────────── */
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    flex-wrap: wrap;
+  }
+
+  .ctrl-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-right: 4px;
+  }
+
+  .seg-group {
+    display: flex;
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .seg-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+    border-right: 1px solid var(--border2);
+  }
+  .seg-btn:last-child { border-right: none; }
+  .seg-btn:hover { background: var(--bg3); color: var(--text); }
+  .seg-btn.active {
+    background: var(--accent2);
+    color: #fff;
+    font-weight: 500;
+  }
+
+  .ctrl-sep {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
+  }
+
+  .refresh-btn {
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 6px 14px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .auto-refresh-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .toggle {
+    width: 32px;
+    height: 16px;
+    border-radius: 8px;
+    background: var(--border2);
+    position: relative;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    transition: all 0.2s;
+  }
+  .toggle.on { background: var(--accent2); }
+  .toggle.on::after { left: 18px; background: #fff; }
+
+  /* ── Main grid ────────────────────────────────────────────── */
+  main {
+    padding: 24px 28px;
+    display: grid;
+    gap: 20px;
+    max-width: 1800px;
+    margin: 0 auto;
+  }
+
+  /* ── Status row ───────────────────────────────────────────── */
+  .status-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+  }
+
+  .status-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+
+  .status-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+    transition: background 0.3s;
+  }
+  .status-card.good::before  { background: var(--green); }
+  .status-card.warn::before  { background: var(--yellow); }
+  .status-card.bad::before   { background: var(--red); }
+  .status-card.unknown::before { background: var(--text-dim); }
+
+  .sc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .sc-role {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+  }
+
+  .sc-badge {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 2px 8px;
+    border-radius: 20px;
+    background: var(--green-dim);
+    color: var(--green);
+  }
+  .sc-badge.warn   { background: var(--yellow-dim); color: var(--yellow); }
+  .sc-badge.bad    { background: var(--red-dim);    color: var(--red); }
+  .sc-badge.unknown { background: var(--bg3); color: var(--text-dim); }
+
+  .sc-host {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--text-bright);
+    font-weight: 500;
+  }
+
+  .sc-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-top: 4px;
+  }
+
+  .sc-metric { display: flex; flex-direction: column; gap: 2px; }
+
+  .sc-metric-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+  }
+
+  .sc-metric-val {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-bright);
+    line-height: 1;
+  }
+
+  .sc-metric-unit {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-weight: 400;
+  }
+
+  .sc-bar-wrap {
+    height: 3px;
+    background: var(--bg3);
+    border-radius: 2px;
+    margin-top: 8px;
+    overflow: hidden;
+  }
+
+  .sc-bar {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--green);
+    transition: width 0.6s ease;
+  }
+  .sc-bar.warn  { background: var(--yellow); }
+  .sc-bar.bad   { background: var(--red); }
+
+  /* ── Totals strip ─────────────────────────────────────────── */
+  .totals-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+  }
+
+  .total-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .tc-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+  }
+
+  .tc-host {
+    font-size: 11px;
+    color: var(--accent);
+    margin-bottom: 2px;
+  }
+
+  .tc-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .tc-key  { font-size: 11px; color: var(--text-dim); }
+  .tc-val  { font-size: 13px; color: var(--text-bright); font-weight: 500; }
+  .tc-loss { color: var(--red); }
+
+  /* ── Chart panels ─────────────────────────────────────────── */
+  .charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    gap: 20px;
+  }
+
+  .chart-panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .cp-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .cp-title {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-bright);
+  }
+
+  .cp-sub {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 1px;
+  }
+
+  .cp-legend {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .chart-wrap {
+    position: relative;
+    height: 200px;
+  }
+
+  /* ── Packet table ─────────────────────────────────────────── */
+  .packet-section {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .section-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-bright);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-header .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  thead th {
+    text-align: left;
+    padding: 10px 18px;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+    font-weight: 400;
+  }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--bg3); }
+
+  tbody td {
+    padding: 10px 18px;
+    color: var(--text);
+    font-family: var(--mono);
+  }
+
+  .td-role {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+  }
+
+  .td-host { color: var(--accent); }
+
+  .td-num { text-align: right; }
+
+  .td-loss-val { font-weight: 600; }
+  .td-loss-val.good   { color: var(--green); }
+  .td-loss-val.warn   { color: var(--yellow); }
+  .td-loss-val.bad    { color: var(--red); }
+
+  /* ── Footer ──────────────────────────────────────────────── */
+  footer {
+    padding: 16px 28px;
+    border-top: 1px solid var(--border);
+    font-size: 10px;
+    color: var(--text-dim);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    background: var(--bg2);
+    margin-top: 8px;
+  }
+
+  /* ── Empty / loading states ──────────────────────────────── */
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+
+  .empty-state .icon { font-size: 32px; margin-bottom: 8px; }
+  .empty-state strong { display: block; color: var(--text); margin-bottom: 4px; }
+
+  /* ── Pulse animation ─────────────────────────────────────── */
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
+  }
+  .pulsing { animation: pulse 2s ease-in-out infinite; }
+
+  /* ── Scrollbar ───────────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ──────────────────────────────────────────────── -->
+<header>
+  <div class="logo">
+    <div class="logo-mark">
+      <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="10" cy="10" r="8" stroke="#00d4ff" stroke-width="1.5"/>
+        <polyline points="3,10 7,6 10,13 13,8 17,10" stroke="#00d4ff" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div>
+      <div class="logo-text">pingdom</div>
+      <div class="logo-sub">Network Quality Monitor</div>
+    </div>
+  </div>
+
+  <div class="staleness" id="stalenessBar">
+    <div class="staleness-dot" id="stalenessDot"></div>
+    <span class="staleness-text" id="stalenessText">Waiting for data…</span>
+  </div>
+</header>
+
+<!-- ── CONTROLS ────────────────────────────────────────────── -->
+<div class="controls">
+  <span class="ctrl-label">Window</span>
+  <div class="seg-group" id="windowGroup">
+    <button class="seg-btn" data-h="1">1h</button>
+    <button class="seg-btn" data-h="3">3h</button>
+    <button class="seg-btn active" data-h="12">12h</button>
+    <button class="seg-btn" data-h="0">All</button>
+  </div>
+
+  <div class="ctrl-sep"></div>
+
+  <span class="ctrl-label">Metric</span>
+  <div class="seg-group" id="metricGroup">
+    <button class="seg-btn active" data-m="avg">Avg RTT</button>
+    <button class="seg-btn" data-m="min">Min RTT</button>
+    <button class="seg-btn" data-m="max">Max RTT</button>
+    <button class="seg-btn" data-m="loss">Loss %</button>
+  </div>
+
+  <div class="ctrl-sep"></div>
+
+  <button class="refresh-btn" id="refreshBtn">
+    <span id="refreshIcon">↻</span> Refresh
+  </button>
+
+  <label class="auto-refresh-label">
+    <div class="toggle on" id="autoToggle"></div>
+    Auto (30s)
+  </label>
+</div>
+
+<!-- ── MAIN ────────────────────────────────────────────────── -->
+<main>
+
+  <!-- Status cards -->
+  <div class="status-row" id="statusRow">
+    <div class="empty-state pulsing">
+      <div class="icon">⌛</div>
+      <strong>Loading data…</strong>
+      Fetching pingdom_data.json
+    </div>
+  </div>
+
+  <!-- Totals strip -->
+  <div class="totals-strip" id="totalsStrip" style="display:none"></div>
+
+  <!-- Charts -->
+  <div class="charts-grid" id="chartsGrid" style="display:none"></div>
+
+  <!-- Packet table -->
+  <div class="packet-section" id="packetSection" style="display:none">
+    <div class="section-header"><div class="dot"></div>Packet Accounting — Recent 20 Cycles per Host</div>
+    <div id="packetTableWrap"></div>
+  </div>
+
+</main>
+
+<footer>
+  <span id="footerLeft">pingdom dashboard</span>
+  <span id="footerRight">data: <span id="footerDataPath">pingdom_data.json</span></span>
+</footer>
+
+<script>
+// ── Configuration ─────────────────────────────────────────────────────────
+const DATA_URL      = 'pingdom_data.json';
+const AUTO_REFRESH  = 30_000;   // ms
+const WARN_STALE_S  = 90;       // show yellow dot after N seconds
+const BAD_STALE_S   = 300;      // show red dot after N seconds
+
+// ── State ─────────────────────────────────────────────────────────────────
+let rawData        = null;
+let windowHours    = 12;
+let metric         = 'avg';
+let autoOn         = true;
+let autoTimer      = null;
+let charts         = {};
+let lastFetched    = null;
+let stalenessTimer = null;
+
+// Role display labels
+const ROLE_LABELS = { gateway: 'Gateway', next_hop: 'Next Hop', arbitrary: 'External' };
+const ROLE_COLORS = { gateway: '#00d4ff', next_hop: '#b388ff', arbitrary: '#00e676' };
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  bindControls();
+  fetchData();
+  scheduleStaleness();
+});
+
+// ── Controls ──────────────────────────────────────────────────────────────
+function bindControls() {
+  document.querySelectorAll('#windowGroup .seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      setActive('#windowGroup', btn);
+      windowHours = parseInt(btn.dataset.h, 10);
+      render();
+    });
+  });
+
+  document.querySelectorAll('#metricGroup .seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      setActive('#metricGroup', btn);
+      metric = btn.dataset.m;
+      render();
+    });
+  });
+
+  document.getElementById('refreshBtn').addEventListener('click', fetchData);
+
+  document.getElementById('autoToggle').addEventListener('click', () => {
+    autoOn = !autoOn;
+    document.getElementById('autoToggle').classList.toggle('on', autoOn);
+    if (autoOn) scheduleAuto(); else clearTimeout(autoTimer);
+  });
+}
+
+function setActive(groupSel, activeBtn) {
+  document.querySelectorAll(`${groupSel} .seg-btn`).forEach(b => b.classList.remove('active'));
+  activeBtn.classList.add('active');
+}
+
+// ── Fetch ─────────────────────────────────────────────────────────────────
+async function fetchData() {
+  const icon = document.getElementById('refreshIcon');
+  icon.style.animation = 'pulse 0.6s linear infinite';
+
+  try {
+    const res = await fetch(DATA_URL + '?_=' + Date.now());
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    rawData = await res.json();
+    lastFetched = new Date();
+    updateStaleness();
+    render();
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    icon.style.animation = '';
+    if (autoOn) scheduleAuto();
+  }
+}
+
+function scheduleAuto() {
+  clearTimeout(autoTimer);
+  autoTimer = setTimeout(fetchData, AUTO_REFRESH);
+}
+
+// ── Staleness indicator ───────────────────────────────────────────────────
+function scheduleStaleness() {
+  clearInterval(stalenessTimer);
+  stalenessTimer = setInterval(updateStaleness, 5000);
+}
+
+function updateStaleness() {
+  const dot  = document.getElementById('stalenessDot');
+  const text = document.getElementById('stalenessText');
+
+  if (!lastFetched) {
+    dot.className  = 'staleness-dot warn pulsing';
+    text.textContent = 'No data loaded yet';
+    return;
+  }
+
+  // Also compare against the generated_at field in the JSON
+  let dataAge = null;
+  if (rawData && rawData.generated_at) {
+    const genAt = new Date(rawData.generated_at);
+    dataAge = Math.round((Date.now() - genAt.getTime()) / 1000);
+  }
+  const fetchAge = Math.round((Date.now() - lastFetched.getTime()) / 1000);
+  const ageS = dataAge !== null ? dataAge : fetchAge;
+
+  const ageStr = ageS < 60
+    ? `${ageS}s ago`
+    : ageS < 3600
+    ? `${Math.floor(ageS/60)}m ${ageS%60}s ago`
+    : `${Math.floor(ageS/3600)}h ${Math.floor((ageS%3600)/60)}m ago`;
+
+  text.textContent = `Data updated ${ageStr}`;
+
+  if (ageS >= BAD_STALE_S) {
+    dot.className = 'staleness-dot stale';
+    text.style.color = 'var(--red)';
+  } else if (ageS >= WARN_STALE_S) {
+    dot.className = 'staleness-dot warn';
+    text.style.color = 'var(--yellow)';
+  } else {
+    dot.className = 'staleness-dot';
+    text.style.color = '';
+  }
+}
+
+// ── Data helpers ──────────────────────────────────────────────────────────
+function filterWindow(entries) {
+  if (!windowHours) return entries;   // 0 = All
+  const cutoff = Date.now() - windowHours * 3600_000;
+  return entries.filter(e => new Date(e.timestamp).getTime() >= cutoff);
+}
+
+function latestEntry(entries) {
+  return entries.length ? entries[entries.length - 1] : null;
+}
+
+function avgOf(entries, field) {
+  const vals = entries.map(e => e[field]).filter(v => v != null);
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+}
+
+function getStatus(entry) {
+  if (!entry) return 'unknown';
+  if (entry.loss_pct >= 50)  return 'bad';
+  if (entry.loss_pct >= 10)  return 'warn';
+  if (entry.rtt_avg_ms > 200) return 'warn';
+  return 'good';
+}
+
+function statusLabel(s) {
+  return { good: 'Online', warn: 'Degraded', bad: 'Offline', unknown: 'No Data' }[s] || s;
+}
+
+// ── Render ────────────────────────────────────────────────────────────────
+function render() {
+  if (!rawData) return;
+  const hosts = rawData.hosts || {};
+  const totals = rawData.totals || {};
+
+  renderStatusCards(hosts);
+  renderTotals(totals, hosts);
+  renderCharts(hosts);
+  renderPacketTable(hosts);
+  updateFooter();
+}
+
+// ── Status cards ──────────────────────────────────────────────────────────
+function renderStatusCards(hosts) {
+  const container = document.getElementById('statusRow');
+  if (!Object.keys(hosts).length) {
+    container.innerHTML = emptyState('No hosts in data file');
+    return;
+  }
+
+  container.innerHTML = '';
+  for (const [role, entries] of Object.entries(hosts)) {
+    const windowed = filterWindow(entries);
+    const last     = latestEntry(windowed);
+    const status   = getStatus(last);
+    const color    = ROLE_COLORS[role] || '#aaa';
+    const label    = ROLE_LABELS[role] || role;
+
+    const avgRtt  = avgOf(windowed, 'rtt_avg_ms');
+    const lossAvg = avgOf(windowed, 'loss_pct');
+    const lossBar = Math.min(100, lossAvg ?? 0);
+
+    // Loss bar class
+    let barCls = '';
+    if ((lossAvg ?? 0) >= 20) barCls = 'bad';
+    else if ((lossAvg ?? 0) >= 5) barCls = 'warn';
+
+    container.innerHTML += `
+      <div class="status-card ${status}">
+        <div class="sc-header">
+          <span class="sc-role">${label}</span>
+          <span class="sc-badge ${status}">${statusLabel(status)}</span>
+        </div>
+        <div class="sc-host">${last ? last.host : '—'}</div>
+        <div class="sc-metrics">
+          <div class="sc-metric">
+            <div class="sc-metric-label">Avg RTT</div>
+            <div class="sc-metric-val">
+              ${avgRtt != null ? avgRtt.toFixed(1) : '—'}
+              <span class="sc-metric-unit">ms</span>
+            </div>
+          </div>
+          <div class="sc-metric">
+            <div class="sc-metric-label">Pkt Loss</div>
+            <div class="sc-metric-val">
+              ${lossAvg != null ? lossAvg.toFixed(1) : '—'}
+              <span class="sc-metric-unit">%</span>
+            </div>
+          </div>
+          <div class="sc-metric">
+            <div class="sc-metric-label">Last Sent</div>
+            <div class="sc-metric-val">
+              ${last ? last.sent : '—'}
+              <span class="sc-metric-unit">pkt</span>
+            </div>
+          </div>
+          <div class="sc-metric">
+            <div class="sc-metric-label">Last Lost</div>
+            <div class="sc-metric-val">
+              ${last ? last.lost : '—'}
+              <span class="sc-metric-unit">pkt</span>
+            </div>
+          </div>
+        </div>
+        <div class="sc-bar-wrap">
+          <div class="sc-bar ${barCls}" style="width:${lossBar}%"></div>
+        </div>
+      </div>`;
+  }
+}
+
+// ── Totals strip ──────────────────────────────────────────────────────────
+function renderTotals(totals, hosts) {
+  const strip = document.getElementById('totalsStrip');
+  if (!Object.keys(totals).length) { strip.style.display = 'none'; return; }
+  strip.style.display = 'grid';
+  strip.innerHTML = '';
+
+  for (const [role, t] of Object.entries(totals)) {
+    const lossTotal = t.sent ? ((t.lost / t.sent) * 100).toFixed(2) : '0.00';
+    const label = ROLE_LABELS[role] || role;
+    strip.innerHTML += `
+      <div class="total-card">
+        <div class="tc-label">Lifetime · ${label}</div>
+        <div class="tc-host">${t.host || '—'}</div>
+        <div class="tc-row"><span class="tc-key">Sent</span>     <span class="tc-val">${(t.sent||0).toLocaleString()}</span></div>
+        <div class="tc-row"><span class="tc-key">Received</span> <span class="tc-val">${(t.received||0).toLocaleString()}</span></div>
+        <div class="tc-row"><span class="tc-key">Lost</span>     <span class="tc-val tc-loss">${(t.lost||0).toLocaleString()}</span></div>
+        <div class="tc-row"><span class="tc-key">Loss %</span>   <span class="tc-val tc-loss">${lossTotal}%</span></div>
+        <div class="tc-row"><span class="tc-key">Cycles</span>   <span class="tc-val">${(t.cycles||0).toLocaleString()}</span></div>
+      </div>`;
+  }
+}
+
+// ── Charts ────────────────────────────────────────────────────────────────
+function renderCharts(hosts) {
+  const grid = document.getElementById('chartsGrid');
+  if (!Object.keys(hosts).length) { grid.style.display = 'none'; return; }
+  grid.style.display = 'grid';
+
+  // Two charts: RTT multi-line, Packet Loss multi-line
+  const chartDefs = [
+    { id: 'chartRtt',  title: 'Round-Trip Time', sub: 'ms over time', field: metricField(), unit: 'ms' },
+    { id: 'chartLoss', title: 'Packet Loss',      sub: '% over time', field: 'loss_pct',    unit: '%'  },
+  ];
+
+  if (!grid.querySelector('#chartRttWrap')) {
+    grid.innerHTML = chartDefs.map(c => `
+      <div class="chart-panel">
+        <div class="cp-header">
+          <div>
+            <div class="cp-title">${c.title}</div>
+            <div class="cp-sub">${c.sub}</div>
+          </div>
+          <div class="cp-legend" id="legend_${c.id}"></div>
+        </div>
+        <div class="chart-wrap" id="${c.id}Wrap">
+          <canvas id="${c.id}"></canvas>
+        </div>
+      </div>`).join('');
+  }
+
+  chartDefs.forEach(c => buildChart(c, hosts));
+}
+
+function metricField() {
+  return { avg: 'rtt_avg_ms', min: 'rtt_min_ms', max: 'rtt_max_ms', loss: 'loss_pct' }[metric] || 'rtt_avg_ms';
+}
+
+function buildChart({ id, field, unit }, hosts) {
+  // Build combined dataset from all roles
+  const datasets = [];
+  const allTimes = new Set();
+
+  for (const [role, entries] of Object.entries(hosts)) {
+    const windowed = filterWindow(entries);
+    windowed.forEach(e => allTimes.add(e.timestamp));
+  }
+
+  const sortedTimes = [...allTimes].sort();
+
+  for (const [role, entries] of Object.entries(hosts)) {
+    const windowed = filterWindow(entries);
+    const byTime   = Object.fromEntries(windowed.map(e => [e.timestamp, e[field]]));
+    const color    = ROLE_COLORS[role] || '#aaa';
+    const label    = ROLE_LABELS[role] || role;
+
+    datasets.push({
+      label: label,
+      data: sortedTimes.map(t => ({ x: t, y: byTime[t] ?? null })),
+      borderColor: color,
+      backgroundColor: color + '18',
+      borderWidth: 1.5,
+      pointRadius: sortedTimes.length > 60 ? 0 : 2,
+      pointHoverRadius: 4,
+      tension: 0.35,
+      fill: false,
+      spanGaps: false,
+    });
+  }
+
+  // Destroy existing
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+
+  charts[id] = new Chart(ctx, {
+    type: 'line',
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0d1117',
+          borderColor: '#1e2d3d',
+          borderWidth: 1,
+          titleColor: '#c9d4e0',
+          bodyColor: '#5a7a96',
+          titleFont: { family: "'JetBrains Mono', monospace", size: 11 },
+          bodyFont:  { family: "'JetBrains Mono', monospace", size: 11 },
+          callbacks: {
+            title: items => {
+              const d = new Date(items[0].raw.x);
+              return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            },
+            label: item => ` ${item.dataset.label}: ${item.raw.y != null ? item.raw.y.toFixed(2) + ' ' + unit : 'N/A'}`,
+          }
+        },
+      },
+      scales: {
+        x: {
+          type: 'time',
+          time: { tooltipFormat: 'HH:mm:ss', displayFormats: { minute: 'HH:mm', hour: 'HH:mm' } },
+          grid: { color: '#1e2d3d' },
+          ticks: { color: '#5a7a96', font: { family: "'JetBrains Mono', monospace", size: 10 }, maxTicksLimit: 8 },
+        },
+        y: {
+          grid: { color: '#1e2d3d' },
+          ticks: { color: '#5a7a96', font: { family: "'JetBrains Mono', monospace", size: 10 },
+                   callback: v => v + ' ' + unit },
+          beginAtZero: true,
+        }
+      }
+    }
+  });
+
+  // Update legend
+  const legendEl = document.getElementById('legend_' + id);
+  if (legendEl) {
+    legendEl.innerHTML = Object.entries(hosts).map(([role]) => {
+      const color = ROLE_COLORS[role] || '#aaa';
+      const label = ROLE_LABELS[role] || role;
+      return `<div class="legend-item"><div class="legend-dot" style="background:${color}"></div>${label}</div>`;
+    }).join('');
+  }
+}
+
+// ── Packet table ──────────────────────────────────────────────────────────
+function renderPacketTable(hosts) {
+  const section = document.getElementById('packetSection');
+  const wrap    = document.getElementById('packetTableWrap');
+
+  if (!Object.keys(hosts).length) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+
+  let rows = '';
+  for (const [role, allEntries] of Object.entries(hosts)) {
+    const windowed = filterWindow(allEntries);
+    const recent   = windowed.slice(-20).reverse();
+    const label    = ROLE_LABELS[role] || role;
+
+    recent.forEach((e, i) => {
+      const ts = new Date(e.timestamp);
+      const lossClass = e.loss_pct >= 20 ? 'bad' : e.loss_pct >= 5 ? 'warn' : 'good';
+      rows += `
+        <tr>
+          ${i === 0 ? `<td class="td-role" rowspan="${recent.length}">${label}</td>
+                       <td class="td-host" rowspan="${recent.length}">${e.host}</td>` : ''}
+          <td>${ts.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'})}</td>
+          <td class="td-num">${e.sent}</td>
+          <td class="td-num">${e.received}</td>
+          <td class="td-num">${e.lost}</td>
+          <td class="td-num td-loss-val ${lossClass}">${e.loss_pct.toFixed(1)}%</td>
+          <td class="td-num">${e.rtt_avg_ms != null ? e.rtt_avg_ms.toFixed(1) : '—'}</td>
+          <td class="td-num">${e.rtt_min_ms != null ? e.rtt_min_ms.toFixed(1) : '—'}</td>
+          <td class="td-num">${e.rtt_max_ms != null ? e.rtt_max_ms.toFixed(1) : '—'}</td>
+          <td class="td-num">${e.rtt_stddev_ms != null ? e.rtt_stddev_ms.toFixed(1) : '—'}</td>
+        </tr>`;
+    });
+  }
+
+  wrap.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Role</th><th>Host</th><th>Time</th>
+          <th class="td-num">Sent</th><th class="td-num">Recv</th>
+          <th class="td-num">Lost</th><th class="td-num">Loss %</th>
+          <th class="td-num">Avg ms</th><th class="td-num">Min ms</th>
+          <th class="td-num">Max ms</th><th class="td-num">Stddev ms</th>
+        </tr>
+      </thead>
+      <tbody>${rows || '<tr><td colspan="11" class="empty-state">No data in window</td></tr>'}</tbody>
+    </table>`;
+}
+
+// ── Footer ─────────────────────────────────────────────────────────────────
+function updateFooter() {
+  if (!rawData) return;
+  document.getElementById('footerLeft').textContent =
+    `pingdom v${rawData.version || '?'} · window: ${windowHours ? windowHours + 'h' : 'all'}`;
+  document.getElementById('footerRight').textContent =
+    `generated: ${new Date(rawData.generated_at).toLocaleString()}`;
+}
+
+// ── Error ─────────────────────────────────────────────────────────────────
+function showError(msg) {
+  document.getElementById('statusRow').innerHTML = `
+    <div class="empty-state" style="color:var(--red)">
+      <div class="icon">⚠</div>
+      <strong>Failed to load data</strong>
+      ${msg}<br><br>
+      <small style="color:var(--text-dim)">
+        Ensure pingdom_data.json is in the same directory as this HTML file<br>
+        and that the web server has permission to read it.
+      </small>
+    </div>`;
+  ['totalsStrip','chartsGrid','packetSection'].forEach(id => {
+    document.getElementById(id).style.display = 'none';
+  });
+}
+
+function emptyState(msg) {
+  return `<div class="empty-state"><div class="icon">📭</div><strong>${msg}</strong></div>`;
+}
+</script>
+</body>
+</html>
