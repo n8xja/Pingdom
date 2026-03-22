@@ -1,6 +1,6 @@
 # pingdom
 
-**Version 1.2.2**
+**Version 1.2.3**
 
 A lightweight, zero-dependency network quality monitor written in Python 3.10+.  
 It pings your **local gateway**, the **next-hop router**, and an **arbitrary host** (default `8.8.8.8`) on a configurable interval, writing per-host RTT statistics and packet accounting to individual rotating log files.  An auto-updating web dashboard reads the exported JSON data to display 12 hours of network quality history.
@@ -8,6 +8,14 @@ It pings your **local gateway**, the **next-hop router**, and an **arbitrary hos
 ---
 
 ## Change Log
+
+### 1.2.3 — 2026-03-22
+- **New**: four chart point-radius constants added to the dashboard configuration block, giving full control over dot rendering without editing chart code:
+  - `POINT_DENSITY_THRESHOLD` — number of data points above which the density guard activates (default `60`). Set to `Infinity` to always show dots at full size.
+  - `POINT_RADIUS` — pixel radius of dots when the point count is at or below the threshold (default `2`).
+  - `POINT_RADIUS_MIN` — minimum dot radius applied *above* the threshold (default `0`, preserving the original hide-when-dense behaviour). Set to `1` or higher to always show at least a hairline dot at every data point regardless of density.
+  - `POINT_HOVER_RADIUS` — radius of the hover dot that appears on mouse-over regardless of all other settings (default `4`).
+- **Changed**: `buildChart()` now derives `pointRadius` from `POINT_DENSITY_THRESHOLD`, `POINT_RADIUS`, and `POINT_RADIUS_MIN` instead of the previous inline literal `sortedTimes.length > 60 ? 0 : 2`.
 
 ### 1.2.2 — 2026-03-22
 - **New**: dashboard auto-refresh interval is now user-selectable via a segment control: **10s / 30s / 1m / 5m** (default 1m). The previous hardcoded 30-second value is replaced by a mutable `autoRefreshMs` state variable.
@@ -279,6 +287,26 @@ Charts are fully destroyed and rebuilt on every render triggered by a window-cha
 
 This three-layer approach prevents the *"Canvas is already in use"* error that would otherwise occur when Chart.js retains a reference to a canvas element that has been replaced in the DOM.
 
+### Chart point radius configuration
+
+Four constants at the top of the dashboard `<script>` block control how data-point dots are drawn. Edit them directly in the HTML file — no other changes needed.
+
+| Constant | Default | Description |
+|---|---|---|
+| `POINT_DENSITY_THRESHOLD` | `60` | Point count above which the density guard activates. Set to `Infinity` to always show full-size dots. |
+| `POINT_RADIUS` | `2` | Dot radius in pixels when point count is at or below the threshold. Set to `0` for a line-only chart. |
+| `POINT_RADIUS_MIN` | `0` | Minimum dot radius enforced *above* the threshold. `0` = fully suppress dots on dense data (original behaviour). Set to `1` or higher to always show at least a hairline dot at every data point. |
+| `POINT_HOVER_RADIUS` | `4` | Dot radius on mouse-over hover, always applied regardless of the other settings. |
+
+**How `POINT_RADIUS_MIN` interacts with `POINT_DENSITY_THRESHOLD`**
+
+When the point count is above `POINT_DENSITY_THRESHOLD`, `pointRadius` is set to `POINT_RADIUS_MIN` rather than zero. This means:
+- `POINT_RADIUS_MIN = 0` → dots are fully hidden above the threshold (dense line only).
+- `POINT_RADIUS_MIN = 1` → a 1 px hairline dot appears at every point even on busy 12h or All-window charts.
+- `POINT_RADIUS_MIN = 2` → same size as the normal dot; effectively disables the density guard.
+
+The threshold of `60` at the default 60-second ping interval corresponds to roughly 1 hour of data, so dots are visible in the 1h window and suppressed for 3h, 12h, and All by default. If you shorten `ping.interval_seconds` in `pingdom.json`, lower the threshold to match (e.g. `30` for a 30-second interval).
+
 ### Serving with nginx
 
 ```nginx
@@ -387,7 +415,7 @@ Written to `{WEB_DIR}` after every cycle; consumed by the dashboard:
 ```jsonc
 {
   "generated_at": "YYYY-MM-DDThh:mm:ss+00:00",
-  "version":      "1.2.2",
+  "version":      "1.2.3",
   "window_hours": 12,
   "totals":       { /* same structure as pingdom_packet_totals.json */ },
   "hosts": {

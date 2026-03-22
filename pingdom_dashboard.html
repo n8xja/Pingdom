@@ -693,6 +693,21 @@ const DATA_URL      = 'pingdom_data.json';
 const WARN_STALE_S  = 90;       // show yellow dot after N seconds
 const BAD_STALE_S   = 300;      // show red dot after N seconds
 
+// ── Chart point radius ────────────────────────────────────────────────────
+// POINT_DENSITY_THRESHOLD : hide dots when point count exceeds this value
+//   (prevents overcrowding on dense datasets). Set to Infinity to always show.
+// POINT_RADIUS            : pixel radius of dots when below the threshold.
+//   Set to 0 to always hide dots (line only).
+// POINT_RADIUS_MIN        : minimum dot radius enforced even above the
+//   density threshold. Set to 0 to allow full suppression (original behaviour);
+//   set to 1 or higher to always show at least a hairline dot at every point.
+// POINT_HOVER_RADIUS      : radius of the dot shown on hover regardless of
+//   the above settings — keeps tooltips easy to trigger.
+const POINT_DENSITY_THRESHOLD = 60;   // hide dots above this many points
+const POINT_RADIUS            = 2;    // normal dot size (px) below threshold
+const POINT_RADIUS_MIN        = 0;    // minimum dot size above threshold (0 = fully hidden)
+const POINT_HOVER_RADIUS      = 4;    // hover dot size (px)
+
 // ── State ─────────────────────────────────────────────────────────────────
 let rawData          = null;
 let windowHours      = 12;
@@ -1068,8 +1083,10 @@ function buildChart({ id, field, unit }, hosts) {
       borderColor: color,
       backgroundColor: color + '18',
       borderWidth: 1.5,
-      pointRadius: sortedTimes.length > 60 ? 0 : 2,
-      pointHoverRadius: 4,
+      pointRadius: sortedTimes.length > POINT_DENSITY_THRESHOLD
+                       ? POINT_RADIUS_MIN
+                       : POINT_RADIUS,
+      pointHoverRadius: POINT_HOVER_RADIUS,
       tension: 0.35,
       fill: false,
       spanGaps: false,
