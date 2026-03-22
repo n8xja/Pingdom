@@ -9,13 +9,13 @@ It pings your **local gateway**, the **next-hop router**, and an **arbitrary hos
 
 ## Change Log
 
-### 1.2.2 — 2025-06-01
+### 1.2.2 — 2026-03-22
 - **New**: dashboard auto-refresh interval is now user-selectable via a segment control: **10s / 30s / 1m / 5m** (default 1m). The previous hardcoded 30-second value is replaced by a mutable `autoRefreshMs` state variable.
 - **New**: live countdown display next to the interval selector shows exactly how many seconds remain until the next auto-refresh (e.g. `47s`, `4m32s`). The countdown resets whenever the interval is changed, a manual refresh fires, or auto-refresh is toggled back on. It dims to `—` when auto-refresh is disabled.
 - **Changed**: the `AUTO_REFRESH` constant has been removed; interval is now driven by the selected button's `data-ms` attribute and stored in `autoRefreshMs`.
 - **Changed**: `scheduleAuto()` now also starts a per-second `countdownTimer` interval alongside the fetch `autoTimer`, and clears it correctly when auto-refresh is toggled off or the interval is changed.
 
-### 1.2.1 — 2025-06-01
+### 1.2.1 — 2026-03-22
 - **Fix**: dashboard no longer throws *"Canvas is already in use. Chart with ID '0' must be destroyed before the canvas can be reused"* when switching time windows, metric, or on auto-refresh.
   - Root cause: `renderCharts()` was writing new `<canvas>` elements into the DOM while Chart.js still held live references to the old ones, because the old destroy call happened inside `buildChart()` *after* the innerHTML replacement.
   - Fix 1: `destroyAllCharts()` is now called unconditionally at the top of `renderCharts()`, before any DOM work.
@@ -23,7 +23,7 @@ It pings your **local gateway**, the **next-hop router**, and an **arbitrary hos
   - Fix 3: `CHART_DEFS` is now a module-level constant with `fieldFn` closures so each chart always evaluates the current `metric` at render time rather than capturing a stale value.
 - **Fix**: added `chartjs-adapter-date-fns` CDN script — Chart.js 4's `type: 'time'` X-axis scale requires an explicit date adapter; without it timestamps were not parsed and chart rendering silently failed in some browsers.
 
-### 1.2.0 — 2025-06-01
+### 1.2.0 — 2026-03-22
 - **Project renamed** from `ping_monitor` / `pingdom` to **`pingdom`** throughout.
 - **All file names updated**: `pingdom.py`, `pingdom.json`, `pingdom_events.log`, `pingdom_alerts.log`, `pingdom_records.json`, `pingdom_packet_totals.json`.
 - **All environment variables renamed**: `PINGDOM_CONFIG_PATH`, `PINGDOM_LOG_PATH`, `PINGDOM_WEB_PATH`.
@@ -32,14 +32,14 @@ It pings your **local gateway**, the **next-hop router**, and an **arbitrary hos
 - **New**: `web/pingdom_data.json` exported after every ping cycle — the JSON feed consumed by the dashboard.
 - **New**: `pingdom_dashboard.html` — single-file, dependency-light web dashboard displaying RTT and packet-loss charts for the last 12 hours (or configurable window), with live staleness indicator, auto-refresh, and full packet accounting table.
 
-### 1.1.0 — 2025-06-01
+### 1.1.0 — 2026-03-22
 - Dedicated `packets_<role>_<host>.log` per host with per-cycle and cumulative totals.
 - `pingdom_packet_totals.json` — persistent cumulative packet counts, survives restarts.
 - `--stats` CLI flag for terminal summary.
 - Explicit `lost` field computed and propagated everywhere.
 - Handler guard prevents duplicate log entries on repeated calls.
 
-### 1.0.0 — 2025-06-01
+### 1.0.0 — 2026-03-22
 - Initial release.
 - Auto-detection of gateway and next-hop.
 - Per-host rotating RTT logs.
@@ -337,7 +337,7 @@ Enable `mod_headers`: `sudo a2enmod headers && sudo systemctl restart apache2`
 ### RTT Log Entry (`rtt_<role>_<host>.log`)
 
 ```
-2025-06-01T12:00:00+0000  INFO      host=8.8.8.8  min=9.123ms  avg=10.456ms  max=11.789ms  stddev=0.901ms
+YYYY-MM-DDThh:mm:ss+0000  INFO      host=8.8.8.8  min=9.123ms  avg=10.456ms  max=11.789ms  stddev=0.901ms
 ```
 
 ### Packet Log Entry (`packets_<role>_<host>.log`)
@@ -345,7 +345,7 @@ Enable `mod_headers`: `sudo a2enmod headers && sudo systemctl restart apache2`
 Left of `||` = per-cycle; right of `||` = cumulative session totals:
 
 ```
-2025-06-01T12:00:00+0000  INFO  host=8.8.8.8  cycle_sent=5  cycle_recv=5  cycle_lost=0  cycle_loss=0.0%  ||  total_sent=150  total_recv=148  total_lost=2  total_loss=1.3%  total_cycles=30
+YYYY-MM-DDThh:mm:ss+0000  INFO  host=8.8.8.8  cycle_sent=5  cycle_recv=5  cycle_lost=0  cycle_loss=0.0%  ||  total_sent=150  total_recv=148  total_lost=2  total_loss=1.3%  total_cycles=30
 ```
 
 ### Cumulative Packet Totals (`pingdom_packet_totals.json`)
@@ -364,7 +364,7 @@ Left of `||` = per-cycle; right of `||` = cumulative session totals:
 {
   "gateway": [
     {
-      "timestamp":     "2025-06-01T12:00:00+00:00",
+      "timestamp":     "YYYY-MM-DDThh:mm:ss+00:00",
       "host":          "192.168.1.1",
       "sent":          5,
       "received":      5,
@@ -386,7 +386,7 @@ Written to `{WEB_DIR}` after every cycle; consumed by the dashboard:
 
 ```jsonc
 {
-  "generated_at": "2025-06-01T12:00:00+00:00",
+  "generated_at": "YYYY-MM-DDThh:mm:ss+00:00",
   "version":      "1.2.2",
   "window_hours": 12,
   "totals":       { /* same structure as pingdom_packet_totals.json */ },
