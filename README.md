@@ -448,7 +448,7 @@ sudo journalctl -u pingdom -f
 
 ### macOS launchd
 
-Create `~/Library/LaunchAgents/com.yourname.pingdom.plist`:
+Create `~/Library/LaunchAgents/com.n8xja.pingdom.plist`:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -456,7 +456,7 @@ Create `~/Library/LaunchAgents/com.yourname.pingdom.plist`:
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>Label</key>         <string>com.yourname.pingdom</string>
+    <key>Label</key>         <string>com.n8xja.pingdom</string>
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/python3</string>
@@ -475,7 +475,7 @@ Create `~/Library/LaunchAgents/com.yourname.pingdom.plist`:
 ```
 
 ```bash
-launchctl load ~/Library/LaunchAgents/com.yourname.pingdom.plist
+launchctl load ~/Library/LaunchAgents/com.n8xja.pingdom.plist
 ```
 
 ### Windows Task Scheduler
