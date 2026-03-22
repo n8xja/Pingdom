@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pingdom — Network Quality Dashboard</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <style>
   /* ── Google Font ─────────────────────────────────────────── */
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;700;800&display=swap');
@@ -930,19 +931,38 @@ function renderTotals(totals, hosts) {
 }
 
 // ── Charts ────────────────────────────────────────────────────────────────
+const CHART_DEFS = [
+  { id: 'chartRtt',  title: 'Round-Trip Time', sub: 'ms over time', unit: 'ms', fieldFn: () => metricField() },
+  { id: 'chartLoss', title: 'Packet Loss',      sub: '% over time', unit: '%',  fieldFn: () => 'loss_pct'   },
+];
+
+function destroyAllCharts() {
+  // Destroy tracked instances
+  for (const id of Object.keys(charts)) {
+    try { charts[id].destroy(); } catch(_) {}
+    delete charts[id];
+  }
+  // Safety net: destroy any Chart.js instance still attached to a canvas
+  CHART_DEFS.forEach(({ id }) => {
+    const canvas = document.getElementById(id);
+    if (canvas) {
+      const existing = Chart.getChart(canvas);
+      if (existing) { try { existing.destroy(); } catch(_) {} }
+    }
+  });
+}
+
 function renderCharts(hosts) {
   const grid = document.getElementById('chartsGrid');
   if (!Object.keys(hosts).length) { grid.style.display = 'none'; return; }
   grid.style.display = 'grid';
 
-  // Two charts: RTT multi-line, Packet Loss multi-line
-  const chartDefs = [
-    { id: 'chartRtt',  title: 'Round-Trip Time', sub: 'ms over time', field: metricField(), unit: 'ms' },
-    { id: 'chartLoss', title: 'Packet Loss',      sub: '% over time', field: 'loss_pct',    unit: '%'  },
-  ];
+  // Always destroy before any DOM work to avoid "canvas already in use"
+  destroyAllCharts();
 
-  if (!grid.querySelector('#chartRttWrap')) {
-    grid.innerHTML = chartDefs.map(c => `
+  // Build scaffold HTML once (or rebuild if canvases were wiped)
+  if (!document.getElementById('chartRtt')) {
+    grid.innerHTML = CHART_DEFS.map(c => `
       <div class="chart-panel">
         <div class="cp-header">
           <div>
@@ -957,7 +977,7 @@ function renderCharts(hosts) {
       </div>`).join('');
   }
 
-  chartDefs.forEach(c => buildChart(c, hosts));
+  CHART_DEFS.forEach(c => buildChart({ id: c.id, field: c.fieldFn(), unit: c.unit }, hosts));
 }
 
 function metricField() {
@@ -996,11 +1016,12 @@ function buildChart({ id, field, unit }, hosts) {
     });
   }
 
-  // Destroy existing
-  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
-
   const ctx = document.getElementById(id);
   if (!ctx) return;
+
+  // Final safety check before creating
+  const orphan = Chart.getChart(ctx);
+  if (orphan) { try { orphan.destroy(); } catch(_) {} }
 
   charts[id] = new Chart(ctx, {
     type: 'line',

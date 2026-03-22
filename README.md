@@ -1,6 +1,6 @@
-# Pingdom
+# pingdom
 
-**Version 1.2.0**
+**Version 1.2.1**
 
 A lightweight, zero-dependency network quality monitor written in Python 3.10+.  
 It pings your **local gateway**, the **next-hop router**, and an **arbitrary host** (default `8.8.8.8`) on a configurable interval, writing per-host RTT statistics and packet accounting to individual rotating log files.  An auto-updating web dashboard reads the exported JSON data to display 12 hours of network quality history.
@@ -8,6 +8,14 @@ It pings your **local gateway**, the **next-hop router**, and an **arbitrary hos
 ---
 
 ## Change Log
+
+### 1.2.1 — 2025-06-01
+- **Fix**: dashboard no longer throws *"Canvas is already in use. Chart with ID '0' must be destroyed before the canvas can be reused"* when switching time windows, metric, or on auto-refresh.
+  - Root cause: `renderCharts()` was writing new `<canvas>` elements into the DOM while Chart.js still held live references to the old ones, because the old destroy call happened inside `buildChart()` *after* the innerHTML replacement.
+  - Fix 1: `destroyAllCharts()` is now called unconditionally at the top of `renderCharts()`, before any DOM work.
+  - Fix 2: `Chart.getChart(canvas)` is called as a final safety net immediately before each `new Chart(...)` call to destroy any orphaned instance that survived through an error path.
+  - Fix 3: `CHART_DEFS` is now a module-level constant with `fieldFn` closures so each chart always evaluates the current `metric` at render time rather than capturing a stale value.
+- **Fix**: added `chartjs-adapter-date-fns` CDN script — Chart.js 4's `type: 'time'` X-axis scale requires an explicit date adapter; without it timestamps were not parsed and chart rendering silently failed in some browsers.
 
 ### 1.2.0 — 2025-06-01
 - **Project renamed** from `ping_monitor` / `pingdom` to **`pingdom`** throughout.
@@ -229,19 +237,39 @@ After all hosts are processed, `web/pingdom_data.json` is updated with a filtere
 A single self-contained HTML file that reads `pingdom_data.json` from the same directory.  
 No build step, no backend, no npm — just serve both files from a web server.
 
+### External dependencies (CDN, no install required)
+
+| Library | Version | Purpose |
+|---|---|---|
+| [Chart.js](https://www.chartjs.org/) | 4.4.1 | RTT and packet-loss time-series charts |
+| [chartjs-adapter-date-fns](https://github.com/chartjs/chartjs-adapter-date-fns) | 3.x | Required date adapter for Chart.js `type: 'time'` X-axis scale |
+| [Google Fonts](https://fonts.google.com/) | — | JetBrains Mono + Syne typefaces |
+
+Both Chart.js scripts are loaded from `cdnjs.cloudflare.com` / `cdn.jsdelivr.net`. The dashboard will not render charts if these CDNs are unreachable. For air-gapped deployments, download both scripts and update the `<script src="...">` tags to local paths.
+
 ### Features
 
 | Feature | Detail |
 |---|---|
-| **Staleness indicator** | Header shows how long ago the data was generated. Green → yellow (>90 s) → red (>5 min). |
-| **Auto-refresh** | Fetches `pingdom_data.json` every 30 seconds. Toggle on/off without reload. |
-| **Time window** | Buttons to filter to last 1 h / 3 h / 12 h / All. |
-| **Metric selector** | Switch chart between Avg RTT / Min RTT / Max RTT / Loss %. |
-| **Status cards** | Per-host Online / Degraded / Offline badge with avg RTT, loss %, and last-cycle packet counts. |
-| **Lifetime totals** | Cards showing cumulative sent/received/lost/cycles per host since first run. |
-| **RTT chart** | Multi-line time-series chart for all three hosts. |
-| **Loss chart** | Multi-line packet-loss % chart for all three hosts. |
-| **Packet table** | Most recent 20 cycles per host: timestamp, sent, recv, lost, loss %, avg/min/max/stddev RTT. |
+| **Staleness indicator** | Header shows how long ago `pingdom_data.json` was generated (read from its `generated_at` field, not the fetch time). Dot colour: green → yellow after 90 s → red after 5 min. |
+| **Auto-refresh** | Fetches `pingdom_data.json` every 30 seconds. Toggle on/off without a page reload. |
+| **Time window** | Filter buttons: last 1 h / 3 h / 12 h / All — re-renders all charts and the packet table instantly. |
+| **Metric selector** | Switch the RTT chart between Avg RTT / Min RTT / Max RTT / Loss % without a page reload. |
+| **Status cards** | Per-host Online / Degraded / Offline badge with windowed avg RTT, avg loss %, and last-cycle sent/lost packet counts. |
+| **Lifetime totals** | Cards showing cumulative sent / received / lost / loss % / cycles per host since first run (sourced from `totals` in the JSON export). |
+| **RTT chart** | Multi-line time-series for all three hosts, respecting the active time window and metric selection. |
+| **Loss chart** | Multi-line packet-loss % time-series for all three hosts. |
+| **Packet table** | Most recent 20 cycles per host: timestamp, sent, recv, lost, loss %, avg / min / max / stddev RTT. |
+
+### Chart rendering behaviour
+
+Charts are fully destroyed and rebuilt on every render triggered by a window-change, metric-change, or data refresh. The destroy sequence is:
+
+1. All tracked `Chart` instances in the `charts` map are destroyed and removed.
+2. `Chart.getChart(canvas)` is called on each canvas element as a safety net to catch any orphaned instances.
+3. A final `Chart.getChart(ctx)` guard runs immediately before each `new Chart(...)` call.
+
+This three-layer approach prevents the *"Canvas is already in use"* error that would otherwise occur when Chart.js retains a reference to a canvas element that has been replaced in the DOM.
 
 ### Serving with nginx
 
@@ -351,7 +379,7 @@ Written to `{WEB_DIR}` after every cycle; consumed by the dashboard:
 ```jsonc
 {
   "generated_at": "2025-06-01T12:00:00+00:00",
-  "version":      "1.2.0",
+  "version":      "1.2.1",
   "window_hours": 12,
   "totals":       { /* same structure as pingdom_packet_totals.json */ },
   "hosts": {
