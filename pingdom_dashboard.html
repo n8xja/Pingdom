@@ -218,6 +218,15 @@
     user-select: none;
   }
 
+  .countdown {
+    font-size: 10px;
+    color: var(--text-dim);
+    min-width: 28px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .countdown.off { opacity: 0.35; }
+
   .toggle {
     width: 32px;
     height: 16px;
@@ -630,10 +639,21 @@
     <span id="refreshIcon">↻</span> Refresh
   </button>
 
+  <div class="ctrl-sep"></div>
+
+  <span class="ctrl-label">Auto</span>
   <label class="auto-refresh-label">
     <div class="toggle on" id="autoToggle"></div>
-    Auto (30s)
   </label>
+
+  <div class="seg-group" id="intervalGroup">
+    <button class="seg-btn" data-ms="10000">10s</button>
+    <button class="seg-btn" data-ms="30000">30s</button>
+    <button class="seg-btn active" data-ms="60000">1m</button>
+    <button class="seg-btn" data-ms="300000">5m</button>
+  </div>
+
+  <span class="countdown" id="countdown">—</span>
 </div>
 
 <!-- ── MAIN ────────────────────────────────────────────────── -->
@@ -670,19 +690,21 @@
 <script>
 // ── Configuration ─────────────────────────────────────────────────────────
 const DATA_URL      = 'pingdom_data.json';
-const AUTO_REFRESH  = 30_000;   // ms
 const WARN_STALE_S  = 90;       // show yellow dot after N seconds
 const BAD_STALE_S   = 300;      // show red dot after N seconds
 
 // ── State ─────────────────────────────────────────────────────────────────
-let rawData        = null;
-let windowHours    = 12;
-let metric         = 'avg';
-let autoOn         = true;
-let autoTimer      = null;
-let charts         = {};
-let lastFetched    = null;
-let stalenessTimer = null;
+let rawData          = null;
+let windowHours      = 12;
+let metric           = 'avg';
+let autoOn           = true;
+let autoRefreshMs    = 60000;   // default: 1 minute (matches active seg-btn)
+let autoTimer        = null;
+let countdownTimer   = null;
+let countdownEndsAt  = null;    // Date when next auto-fetch fires
+let charts           = {};
+let lastFetched      = null;
+let stalenessTimer   = null;
 
 // Role display labels
 const ROLE_LABELS = { gateway: 'Gateway', next_hop: 'Next Hop', arbitrary: 'External' };
@@ -713,12 +735,28 @@ function bindControls() {
     });
   });
 
+  document.querySelectorAll('#intervalGroup .seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      setActive('#intervalGroup', btn);
+      autoRefreshMs = parseInt(btn.dataset.ms, 10);
+      // Restart the countdown with the new interval if auto is on
+      if (autoOn) scheduleAuto();
+    });
+  });
+
   document.getElementById('refreshBtn').addEventListener('click', fetchData);
 
   document.getElementById('autoToggle').addEventListener('click', () => {
     autoOn = !autoOn;
     document.getElementById('autoToggle').classList.toggle('on', autoOn);
-    if (autoOn) scheduleAuto(); else clearTimeout(autoTimer);
+    if (autoOn) {
+      scheduleAuto();
+    } else {
+      clearTimeout(autoTimer);
+      clearInterval(countdownTimer);
+      countdownEndsAt = null;
+      updateCountdown();
+    }
   });
 }
 
@@ -749,7 +787,29 @@ async function fetchData() {
 
 function scheduleAuto() {
   clearTimeout(autoTimer);
-  autoTimer = setTimeout(fetchData, AUTO_REFRESH);
+  clearInterval(countdownTimer);
+  countdownEndsAt = new Date(Date.now() + autoRefreshMs);
+  autoTimer = setTimeout(fetchData, autoRefreshMs);
+  // Tick countdown every second
+  countdownTimer = setInterval(updateCountdown, 1000);
+  updateCountdown();
+}
+
+function updateCountdown() {
+  const el = document.getElementById('countdown');
+  if (!el) return;
+  if (!autoOn || !countdownEndsAt) {
+    el.textContent = '—';
+    el.className = 'countdown off';
+    return;
+  }
+  const secsLeft = Math.max(0, Math.round((countdownEndsAt.getTime() - Date.now()) / 1000));
+  el.className = 'countdown';
+  if (secsLeft >= 60) {
+    el.textContent = `${Math.floor(secsLeft / 60)}m${secsLeft % 60}s`;
+  } else {
+    el.textContent = `${secsLeft}s`;
+  }
 }
 
 // ── Staleness indicator ───────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 # pingdom
 
-**Version 1.2.1**
+**Version 1.2.2**
 
 A lightweight, zero-dependency network quality monitor written in Python 3.10+.  
 It pings your **local gateway**, the **next-hop router**, and an **arbitrary host** (default `8.8.8.8`) on a configurable interval, writing per-host RTT statistics and packet accounting to individual rotating log files.  An auto-updating web dashboard reads the exported JSON data to display 12 hours of network quality history.
@@ -8,6 +8,12 @@ It pings your **local gateway**, the **next-hop router**, and an **arbitrary hos
 ---
 
 ## Change Log
+
+### 1.2.2 — 2025-06-01
+- **New**: dashboard auto-refresh interval is now user-selectable via a segment control: **10s / 30s / 1m / 5m** (default 1m). The previous hardcoded 30-second value is replaced by a mutable `autoRefreshMs` state variable.
+- **New**: live countdown display next to the interval selector shows exactly how many seconds remain until the next auto-refresh (e.g. `47s`, `4m32s`). The countdown resets whenever the interval is changed, a manual refresh fires, or auto-refresh is toggled back on. It dims to `—` when auto-refresh is disabled.
+- **Changed**: the `AUTO_REFRESH` constant has been removed; interval is now driven by the selected button's `data-ms` attribute and stored in `autoRefreshMs`.
+- **Changed**: `scheduleAuto()` now also starts a per-second `countdownTimer` interval alongside the fetch `autoTimer`, and clears it correctly when auto-refresh is toggled off or the interval is changed.
 
 ### 1.2.1 — 2025-06-01
 - **Fix**: dashboard no longer throws *"Canvas is already in use. Chart with ID '0' must be destroyed before the canvas can be reused"* when switching time windows, metric, or on auto-refresh.
@@ -63,7 +69,7 @@ It pings your **local gateway**, the **next-hop router**, and an **arbitrary hos
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourname/pingdom.git
+git clone https://github.com/n8xja/pingdom.git
 cd pingdom
 
 # Run once — auto-detects all three hosts
@@ -252,7 +258,9 @@ Both Chart.js scripts are loaded from `cdnjs.cloudflare.com` / `cdn.jsdelivr.net
 | Feature | Detail |
 |---|---|
 | **Staleness indicator** | Header shows how long ago `pingdom_data.json` was generated (read from its `generated_at` field, not the fetch time). Dot colour: green → yellow after 90 s → red after 5 min. |
-| **Auto-refresh** | Fetches `pingdom_data.json` every 30 seconds. Toggle on/off without a page reload. |
+| **Auto-refresh toggle** | Enable or disable automatic refresh without a page reload. |
+| **Refresh interval** | Segment control to select the auto-refresh interval: **10s / 30s / 1m / 5m** (default 1m). Changing the interval restarts the countdown immediately. |
+| **Refresh countdown** | Live countdown (e.g. `47s`, `4m32s`) showing time until the next auto-refresh. Dims to `—` when auto-refresh is disabled. |
 | **Time window** | Filter buttons: last 1 h / 3 h / 12 h / All — re-renders all charts and the packet table instantly. |
 | **Metric selector** | Switch the RTT chart between Avg RTT / Min RTT / Max RTT / Loss % without a page reload. |
 | **Status cards** | Per-host Online / Degraded / Offline badge with windowed avg RTT, avg loss %, and last-cycle sent/lost packet counts. |
@@ -379,7 +387,7 @@ Written to `{WEB_DIR}` after every cycle; consumed by the dashboard:
 ```jsonc
 {
   "generated_at": "2025-06-01T12:00:00+00:00",
-  "version":      "1.2.1",
+  "version":      "1.2.2",
   "window_hours": 12,
   "totals":       { /* same structure as pingdom_packet_totals.json */ },
   "hosts": {
