@@ -1,6 +1,6 @@
 # pingdom
 
-**Version 1.2.3**
+**Version 1.2.4**
 
 A lightweight, zero-dependency network quality monitor written in Python 3.10+.  
 It pings your **local gateway**, the **next-hop router**, and an **arbitrary host** (default `8.8.8.8`) on a configurable interval, writing per-host RTT statistics and packet accounting to individual rotating log files.  An auto-updating web dashboard reads the exported JSON data to display 12 hours of network quality history.
@@ -8,6 +8,15 @@ It pings your **local gateway**, the **next-hop router**, and an **arbitrary hos
 ---
 
 ## Change Log
+
+### 1.2.4 — 2026-03-22
+- **New**: the RTT chart title and subtitle now update dynamically when the metric selector is changed:
+  - **Avg RTT** → *Round-Trip Time — Average* / `avg ms over time`
+  - **Min RTT** → *Round-Trip Time — Minimum* / `min ms over time`
+  - **Max RTT** → *Round-Trip Time — Maximum* / `max ms over time`
+  - **Loss %** → *Packet Loss* / `% over time` (the Loss chart title is unchanged)
+- **Changed**: `METRIC_LABELS` map added to the dashboard script — maps each metric key (`avg`, `min`, `max`, `loss`) to a `{ title, sub }` object consumed by `renderCharts()`.
+- **Changed**: chart panel title and subtitle elements now carry stable IDs (`title_chartRtt`, `sub_chartRtt`) so `renderCharts()` can update them in-place without rebuilding the scaffold HTML.
 
 ### 1.2.3 — 2026-03-22
 - **New**: four chart point-radius constants added to the dashboard configuration block, giving full control over dot rendering without editing chart code:
@@ -270,7 +279,7 @@ Both Chart.js scripts are loaded from `cdnjs.cloudflare.com` / `cdn.jsdelivr.net
 | **Refresh interval** | Segment control to select the auto-refresh interval: **10s / 30s / 1m / 5m** (default 1m). Changing the interval restarts the countdown immediately. |
 | **Refresh countdown** | Live countdown (e.g. `47s`, `4m32s`) showing time until the next auto-refresh. Dims to `—` when auto-refresh is disabled. |
 | **Time window** | Filter buttons: last 1 h / 3 h / 12 h / All — re-renders all charts and the packet table instantly. |
-| **Metric selector** | Switch the RTT chart between Avg RTT / Min RTT / Max RTT / Loss % without a page reload. |
+| **Metric selector** | Switch the RTT chart between Avg RTT / Min RTT / Max RTT / Loss % without a page reload. The RTT chart title updates to reflect the active metric (e.g. *Round-Trip Time — Minimum*). |
 | **Status cards** | Per-host Online / Degraded / Offline badge with windowed avg RTT, avg loss %, and last-cycle sent/lost packet counts. |
 | **Lifetime totals** | Cards showing cumulative sent / received / lost / loss % / cycles per host since first run (sourced from `totals` in the JSON export). |
 | **RTT chart** | Multi-line time-series for all three hosts, respecting the active time window and metric selection. |
@@ -415,7 +424,7 @@ Written to `{WEB_DIR}` after every cycle; consumed by the dashboard:
 ```jsonc
 {
   "generated_at": "YYYY-MM-DDThh:mm:ss+00:00",
-  "version":      "1.2.3",
+  "version":      "1.2.4",
   "window_hours": 12,
   "totals":       { /* same structure as pingdom_packet_totals.json */ },
   "hosts": {

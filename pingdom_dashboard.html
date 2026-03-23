@@ -1006,9 +1006,17 @@ function renderTotals(totals, hosts) {
 }
 
 // ── Charts ────────────────────────────────────────────────────────────────
+// Per-metric labels for the RTT chart title and subtitle
+const METRIC_LABELS = {
+  avg:  { title: 'Round-Trip Time — Average',  sub: 'avg ms over time' },
+  min:  { title: 'Round-Trip Time — Minimum',  sub: 'min ms over time' },
+  max:  { title: 'Round-Trip Time — Maximum',  sub: 'max ms over time' },
+  loss: { title: 'Packet Loss',                sub: '% over time'      },
+};
+
 const CHART_DEFS = [
-  { id: 'chartRtt',  title: 'Round-Trip Time', sub: 'ms over time', unit: 'ms', fieldFn: () => metricField() },
-  { id: 'chartLoss', title: 'Packet Loss',      sub: '% over time', unit: '%',  fieldFn: () => 'loss_pct'   },
+  { id: 'chartRtt',  title: 'Round-Trip Time — Average', sub: 'avg ms over time', unit: 'ms', fieldFn: () => metricField() },
+  { id: 'chartLoss', title: 'Packet Loss',               sub: '% over time',      unit: '%',  fieldFn: () => 'loss_pct'   },
 ];
 
 function destroyAllCharts() {
@@ -1041,8 +1049,8 @@ function renderCharts(hosts) {
       <div class="chart-panel">
         <div class="cp-header">
           <div>
-            <div class="cp-title">${c.title}</div>
-            <div class="cp-sub">${c.sub}</div>
+            <div class="cp-title" id="title_${c.id}">${c.title}</div>
+            <div class="cp-sub"   id="sub_${c.id}">${c.sub}</div>
           </div>
           <div class="cp-legend" id="legend_${c.id}"></div>
         </div>
@@ -1051,6 +1059,13 @@ function renderCharts(hosts) {
         </div>
       </div>`).join('');
   }
+
+  // Update RTT chart title/sub to reflect the active metric selection
+  const rttLabel = METRIC_LABELS[metric] || METRIC_LABELS.avg;
+  const titleEl  = document.getElementById('title_chartRtt');
+  const subEl    = document.getElementById('sub_chartRtt');
+  if (titleEl) titleEl.textContent = rttLabel.title;
+  if (subEl)   subEl.textContent   = rttLabel.sub;
 
   CHART_DEFS.forEach(c => buildChart({ id: c.id, field: c.fieldFn(), unit: c.unit }, hosts));
 }
