@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 pingdom.py - Network Quality Monitor
-Version: 1.2.6
+Version: 1.2.7
 
 Monitors network latency by pinging the local gateway, next-hop router, and
 an arbitrary host.  For each host the script maintains two dedicated log files:
@@ -32,7 +32,7 @@ from logging.handlers import RotatingFileHandler
 # ──────────────────────────────────────────────
 # VERSION
 # ──────────────────────────────────────────────
-VERSION = "1.2.6"
+VERSION = "1.2.7"
 
 # ──────────────────────────────────────────────
 # DEFAULT SCRIPT-LEVEL PATH VARIABLES

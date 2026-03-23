@@ -630,6 +630,7 @@
     <button class="seg-btn active" data-m="avg">Avg RTT</button>
     <button class="seg-btn" data-m="min">Min RTT</button>
     <button class="seg-btn" data-m="max">Max RTT</button>
+    <button class="seg-btn" data-m="stddev">Stddev</button>
     <button class="seg-btn" data-m="loss">Loss %</button>
   </div>
 
@@ -1008,14 +1009,16 @@ function renderTotals(totals, hosts) {
 // ── Charts ────────────────────────────────────────────────────────────────
 // Per-metric labels for the RTT chart title and subtitle
 const METRIC_LABELS = {
-  avg:  { title: 'Round-Trip Time — Average',  sub: 'avg ms over time' },
-  min:  { title: 'Round-Trip Time — Minimum',  sub: 'min ms over time' },
-  max:  { title: 'Round-Trip Time — Maximum',  sub: 'max ms over time' },
-  loss: { title: 'Packet Loss',                sub: '% over time'      },
+  avg:    { title: 'Round-Trip Time — Average',            sub: 'avg ms over time'    },
+  min:    { title: 'Round-Trip Time — Minimum',            sub: 'min ms over time'    },
+  max:    { title: 'Round-Trip Time — Maximum',            sub: 'max ms over time'    },
+  stddev: { title: 'Round-Trip Time — Std Deviation',      sub: 'stddev ms over time' },
+  loss:   { title: 'Packet Loss',                          sub: '% over time'         },
 };
 
 const CHART_DEFS = [
   { id: 'chartRtt', title: 'Round-Trip Time — Average', sub: 'avg ms over time', unitFn: () => metric === 'loss' ? '%' : 'ms', fieldFn: () => metricField() },
+  // unitFn: 'loss' => '%', all RTT metrics (avg/min/max/stddev) => 'ms'
 ];
 
 function destroyAllCharts() {
@@ -1070,7 +1073,7 @@ function renderCharts(hosts) {
 }
 
 function metricField() {
-  return { avg: 'rtt_avg_ms', min: 'rtt_min_ms', max: 'rtt_max_ms', loss: 'loss_pct' }[metric] || 'rtt_avg_ms';
+  return { avg: 'rtt_avg_ms', min: 'rtt_min_ms', max: 'rtt_max_ms', stddev: 'rtt_stddev_ms', loss: 'loss_pct' }[metric] || 'rtt_avg_ms';
 }
 
 function buildChart({ id, field, unit }, hosts) {
