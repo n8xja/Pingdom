@@ -1015,8 +1015,8 @@ const METRIC_LABELS = {
 };
 
 const CHART_DEFS = [
-  { id: 'chartRtt',  title: 'Round-Trip Time — Average', sub: 'avg ms over time', unit: 'ms', fieldFn: () => metricField() },
-  { id: 'chartLoss', title: 'Packet Loss',               sub: '% over time',      unit: '%',  fieldFn: () => 'loss_pct'   },
+  { id: 'chartRtt',  title: 'Round-Trip Time — Average', sub: 'avg ms over time', unitFn: () => metric === 'loss' ? '%' : 'ms', fieldFn: () => metricField() },
+  { id: 'chartLoss', title: 'Packet Loss',               sub: '% over time',      unitFn: () => '%',               fieldFn: () => 'loss_pct'   },
 ];
 
 function destroyAllCharts() {
@@ -1067,7 +1067,7 @@ function renderCharts(hosts) {
   if (titleEl) titleEl.textContent = rttLabel.title;
   if (subEl)   subEl.textContent   = rttLabel.sub;
 
-  CHART_DEFS.forEach(c => buildChart({ id: c.id, field: c.fieldFn(), unit: c.unit }, hosts));
+  CHART_DEFS.forEach(c => buildChart({ id: c.id, field: c.fieldFn(), unit: c.unitFn() }, hosts));
 }
 
 function metricField() {
@@ -1153,6 +1153,7 @@ function buildChart({ id, field, unit }, hosts) {
           ticks: { color: '#5a7a96', font: { family: "'JetBrains Mono', monospace", size: 10 },
                    callback: v => v + ' ' + unit },
           beginAtZero: true,
+          ...(unit === '%' ? { min: 0, max: 100 } : {}),
         }
       }
     }

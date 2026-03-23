@@ -1,6 +1,6 @@
 # pingdom
 
-**Version 1.2.4**
+**Version 1.2.5**
 
 A lightweight, zero-dependency network quality monitor written in Python 3.10+.  
 It pings your **local gateway**, the **next-hop router**, and an **arbitrary host** (default `8.8.8.8`) on a configurable interval, writing per-host RTT statistics and packet accounting to individual rotating log files.  An auto-updating web dashboard reads the exported JSON data to display 12 hours of network quality history.
@@ -8,6 +8,11 @@ It pings your **local gateway**, the **next-hop router**, and an **arbitrary hos
 ---
 
 ## Change Log
+
+### 1.2.5 — 2026-03-22
+- **Fix**: when the RTT chart metric selector is set to **Loss %**, the Y-axis tick labels now correctly show `%` instead of `ms`.
+- **Fix**: the Y-axis is now capped at `min: 0, max: 100` when the unit is `%`, preventing the scale from auto-ranging beyond valid percentage bounds.
+- **Changed**: `unit` in `CHART_DEFS` replaced with `unitFn` — a closure that evaluates `metric` at render time. The RTT chart entry returns `'%'` when metric is `loss`, `'ms'` otherwise. The Loss chart entry always returns `'%'`. This ensures both the Y-axis tick labels and the tooltip suffix always match the data being graphed.
 
 ### 1.2.4 — 2026-03-22
 - **New**: the RTT chart title and subtitle now update dynamically when the metric selector is changed:
@@ -424,7 +429,7 @@ Written to `{WEB_DIR}` after every cycle; consumed by the dashboard:
 ```jsonc
 {
   "generated_at": "YYYY-MM-DDThh:mm:ss+00:00",
-  "version":      "1.2.4",
+  "version":      "1.2.5",
   "window_hours": 12,
   "totals":       { /* same structure as pingdom_packet_totals.json */ },
   "hosts": {
