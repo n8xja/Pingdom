@@ -417,7 +417,7 @@
   /* ── Chart panels ─────────────────────────────────────────── */
   .charts-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    grid-template-columns: 1fr;
     gap: 20px;
   }
 
@@ -1015,8 +1015,7 @@ const METRIC_LABELS = {
 };
 
 const CHART_DEFS = [
-  { id: 'chartRtt',  title: 'Round-Trip Time — Average', sub: 'avg ms over time', unitFn: () => metric === 'loss' ? '%' : 'ms', fieldFn: () => metricField() },
-  { id: 'chartLoss', title: 'Packet Loss',               sub: '% over time',      unitFn: () => '%',               fieldFn: () => 'loss_pct'   },
+  { id: 'chartRtt', title: 'Round-Trip Time — Average', sub: 'avg ms over time', unitFn: () => metric === 'loss' ? '%' : 'ms', fieldFn: () => metricField() },
 ];
 
 function destroyAllCharts() {
@@ -1153,7 +1152,7 @@ function buildChart({ id, field, unit }, hosts) {
           ticks: { color: '#5a7a96', font: { family: "'JetBrains Mono', monospace", size: 10 },
                    callback: v => v + ' ' + unit },
           beginAtZero: true,
-          ...(unit === '%' ? { min: 0, max: 100 } : {}),
+          ...(unit === '%' ? { min: 0 } : {}),
         }
       }
     }

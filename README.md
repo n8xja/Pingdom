@@ -1,6 +1,6 @@
 # pingdom
 
-**Version 1.2.5**
+**Version 1.2.6**
 
 A lightweight, zero-dependency network quality monitor written in Python 3.10+.  
 It pings your **local gateway**, the **next-hop router**, and an **arbitrary host** (default `8.8.8.8`) on a configurable interval, writing per-host RTT statistics and packet accounting to individual rotating log files.  An auto-updating web dashboard reads the exported JSON data to display 12 hours of network quality history.
@@ -8,6 +8,12 @@ It pings your **local gateway**, the **next-hop router**, and an **arbitrary hos
 ---
 
 ## Change Log
+
+### 1.2.6 — 2026-03-22
+- **Changed**: dedicated Packet Loss graph removed from the dashboard. Loss % is now accessed by selecting the **Loss %** option in the metric selector on the single RTT chart, which spans the full width of the page.
+- **Changed**: `.charts-grid` CSS updated from `repeat(auto-fit, minmax(420px, 1fr))` to `1fr` so the single chart always fills the full available width.
+- **Changed**: `CHART_DEFS` reduced to a single entry (`chartRtt`). The `chartLoss` entry and its associated canvas, legend, and scaffold HTML are removed.
+- **Changed**: Y-axis auto-scaling for `%` unit — the hard `max: 100` cap is removed. The axis now starts at `0` and auto-scales to fit the actual data, giving better resolution when all loss values are low (e.g. 0–5%). The manual Loss % chart, which always graphed 0–100, no longer exists.
 
 ### 1.2.5 — 2026-03-22
 - **Fix**: when the RTT chart metric selector is set to **Loss %**, the Y-axis tick labels now correctly show `%` instead of `ms`.
@@ -288,7 +294,7 @@ Both Chart.js scripts are loaded from `cdnjs.cloudflare.com` / `cdn.jsdelivr.net
 | **Status cards** | Per-host Online / Degraded / Offline badge with windowed avg RTT, avg loss %, and last-cycle sent/lost packet counts. |
 | **Lifetime totals** | Cards showing cumulative sent / received / lost / loss % / cycles per host since first run (sourced from `totals` in the JSON export). |
 | **RTT chart** | Multi-line time-series for all three hosts, respecting the active time window and metric selection. |
-| **Loss chart** | Multi-line packet-loss % time-series for all three hosts. |
+| **Loss %** | Packet loss is graphed by selecting **Loss %** in the metric selector; the single full-width chart switches field, title, and Y-axis unit automatically. The Y-axis auto-scales from 0 to fit the data (no hard 100% ceiling). |
 | **Packet table** | Most recent 20 cycles per host: timestamp, sent, recv, lost, loss %, avg / min / max / stddev RTT. |
 
 ### Chart rendering behaviour
@@ -429,7 +435,7 @@ Written to `{WEB_DIR}` after every cycle; consumed by the dashboard:
 ```jsonc
 {
   "generated_at": "YYYY-MM-DDThh:mm:ss+00:00",
-  "version":      "1.2.5",
+  "version":      "1.2.6",
   "window_hours": 12,
   "totals":       { /* same structure as pingdom_packet_totals.json */ },
   "hosts": {
